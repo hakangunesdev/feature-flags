@@ -1,0 +1,37 @@
+admin kısmı vanila js ile kullanıcı test kısmı ise react ile yapıldı.
+
+öncelikle admin key kısmını göstereyim,admin.py içerisinde route tanımına baktığımız zaman burda bir şart koşmuş,yani diyor ki bu endpointler geldiği zaman benim bu endpointlere çağrı yapabilmem için ben bir adminrequest bekliyorum,yani kısacası
+bir admin key bekliyor,bu admin key doğrulaması ise admin.auth.py dosyasında yapılıyor.peki bu doğrulama nasıl yapılıyor.öncelikle bu bilginin header'dan alınacağını belirtiyor ve de header tagının X-Admin-Key olduğunu söylüyor yani bu admin keyi
+gönderilirken X-Admin-Key: admin-dev-123 diye yollanacak.default ifadesi ile herhangi bir key ataması yapılmazsa bu admin keye none ifadesi atanıyor ve aşağıda hata fırlatıyor,Invalid admin key.Sonrasında bu admin key'in bilgisi .env.docker dosyasından
+çekiliyor,ilk olarak if koşulunda bu adminkeyin dolu olup olmadığı kontrol ediliyor,sonraki if koşulunda ise bu admin keyin doğruluğu kontrol ediliyor.Bu backend kısmıydı şimdi ise frontend kısmına geçelim bu frontend kısmında aşağıdaki kod yapısı 
+bulunuyor:
+
+const adminKey = localStorage.getItem("ADMIN_KEY") || "";
+  if (adminKey) opts.headers["X-Admin-Key"] = adminKey;
+
+localStorage ifadesi bilgisayarımızda tutulan not defteridir yani sunucuda tutulmaz,peki bu ne işe yaramaktadır.admin.py kısmına gidip baktğımız zaman her endpoint isteğinde bir admin key istendiğini biliyoruz,her endpoint isteğinde admin keyi girmek
+uğraştırıcı oluyor,bu işten kaçmak için ilk admin key girişimizi yaptıktan sonra bu endpoint localStorage de tutuluyor ve böylece her seferinde admin keyi girmek zorunda kalmıyoruz.
+
+
+
+proje oluşturma adımı:ilk olarak biz admin ui'da project kısmına tıkladığımız zaman yukarıdaki url'de dikkat edersek sonuna #/projects takısı ekleniyor.İşte bu kısım index.html içerisindeki 14-17 arasındaki satırlarda gerçekleşmektedir.bizim işimiz
+bu url tagı ile gerçekleşecek,app.js dosyasının en altına indiğimiz zaman bu dosya yapısında route() fonksiyonunun olduğunu görüyorum,bu fonksiyon diyor ki eğer ki hash yapısı #/projects ile başlıyorsa renderProjects() metotunu geri döndür.bu metot 
+admin arayüzünün tasarımı yani butonların submit olduğunu,ilgili kısmın project name olduğu gibi ifadeleri tutmaktadır.bu kısımda ayriyeten butona basılma gibi olayların hepsi bir formda tutulmaktadır ve bu formun ismi de createProjectForm olmaktadır.
+bu createProjectForm kısmını ctrl+f ile arattığımızda diğer bir satıra geçiyoruz ve de işte burada endpoint isteklerimiz gerçekleşiyor.bu kod yapısını açıklamak gerekirse e.preventDefault(); ile form sayfaları gibi yenilenmesini önlemek amacıyla 
+yazıyoruz.const name ile html kodundan projectName alanlı bilgiyi çekiyoruz.await apiFetch("/admin/v1/projects", { method: "POST", body: { name } }); ile de apiFetch adlı metota bu isteklerimizi yolluyoruz.apiFetch metotunun başındaki yer alan get
+ifadesi der ki sen isteğin hangi türden olduğunu belirtmezsen ben oto olarak bunu get'e çevireceğim.Sonrasında ise header tagını alır,admin keyini alır,body ifadesini alır({ "name": "lezzet_kapida" }) ve backende await fetch(API_BASE + path, opts);
+ifadesi ile çağrı yapar.ardından bu kod yapımızdaki await load(); ifadesi ise yenilenen bilgileri tekrardan ekrana yazdırır.
+sonrasında ise bu endpoint isteğini backendde main.py içerisindeki app.include_router(admin.router, prefix="/admin/v1", tags=["admin"]) tagına gelir,bu tagda gelen project ifadesinin başına /admin/v1/projects/ olarak düzeltiyor.sonrasında admin.py 
+dosyasındaki bu taga uygun olan @router.post("/projects", response_model=Project) endpointine gider ve bilgiyi ekler,bu kısımda admin router'ı admin key istiyordu,işte apiFetch ile aldığımız keyi bu router da kullanıyorum.bundan sonra ise apiFetch()
+ifadesi geriye get isteği ile değer çeker ve bunu load() fonksiyonu ile ekrana yazdırır.
+
+menüde yer alan flags seçeneğine geçersek,bu seçenekte normal createFlag ifadesi diğer menüler gibi çalışmaktadır,yeni bir flag ekledikten sonra ekranda flaglerin yanında manage butonu belirmektedir,bu buton direkt html kodları içerisine gömülü
+değil,çünkü çağrıldığı zaman oluşmaktadır.bu kodu bulmak için yine renderflags fonksiyonuna gidip bu html kodlarının altındaki kod yapılarına baktığımız zaman const rows = flags.map(f => ` şeklinde bir kod yapısı bulunmaktadır,bu kod yapısında
+manage butonunun tanımlamasının taglarının içinde bu butona basıldığı zaman data-action="manage" oto olarak tagına sahip kod yapısı çalışır ve bu kod yapısında yukarıdaki url ifadesine ek olarak tıklanılan flag'in id'si alınır ve url'ye ekleniyor
+böylece başka app.js içerisindeki farklı bir route satırı aktif oluyor.Artık yeni açılan sekmedeki ifadeler diğer butonlar gibi çağrılıyor.
+
+configs ifadesi aynı diğer sekmeler gibi çalışmaktadır,tek farkı öğe ekledikten sonra yine aynı flags olduğu gibi edit ve delete butonları const rows = cfgs.map(c => { kısmında tanımlanıyor ve aşağı doğru indiğimiz zaman bu del ve edit butonlarının
+data-act="del şeklinde tanımlandığını farkediyoruz.
+
+sdk-preview seçeneğinin çalışma şekli ise diğer seçeneklerden farklıdır,çünkü normalde diğer sekmelerde ya post ya da patch işlemi yaparken burda yalnızca get isteği yapacağımızdan dolayı form işlemi yok,bu html kod yapısına baktığımız zaman 
+bu iki butonun tanımlandığını görüyoruz,patch ifadesi get işlemi yaparken delete ifadesi ise yalnızca ekrandan ifadeleri siliyor.

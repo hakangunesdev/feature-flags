@@ -18,16 +18,24 @@ if not DATABASE_URL:
     DB_PASS = os.getenv("DB_PASS", "ff_pass_123")
     DB_NAME = os.getenv("DB_NAME", "feature_flags")
     DATABASE_URL = f"mysql+pymysql://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+"""
+öncelikle db var mı yok mu kontrolu yapılıyor,yoksa klasik yöntemlerle oluşturuluyor.
+"""
 
 engine = create_engine(DATABASE_URL, echo=False, pool_pre_ping=True)
+"""
+db'ye bağlanma motoru oluşturuluyor.bu motoru oluştururken database_url'yi kullanır,echo=false ifadesi sql loglarını terminal'e bastırır.pool ifadesi sql havuzundan veri çekmeyi sağlıyor.
+"""
 
-# SQLite foreign key desteğini aç (önemli)
 @event.listens_for(Engine, "connect")
 def _set_sqlite_pragma(dbapi_connection, connection_record):
     if isinstance(dbapi_connection, sqlite3.Connection):
         cursor = dbapi_connection.cursor()
         cursor.execute("PRAGMA foreign_keys=ON;")
         cursor.close()
+"""
+her bağlantı kurulduğunda foreign key kurallarının uygulanmasını sağlar.
+"""
 
 def get_session():     
     with Session(engine) as session:

@@ -19,10 +19,14 @@ def _resolve_sdk_and_environment(session: Session, env: str, x_sdk_key: str):
     if not sdk:
         raise HTTPException(status_code=401, detail="Invalid SDK key")
     """
-    yukarıdaki kod satırımız da ise parametre olarak aldığımız x_sdk_key değerini SDKKey adlı tabloda arıyoruz.kod satırına geçersek:
-    select(SDKKey) ifadesi SDKKey adlı tablomuza gider,where(SDKKey.key==x_sdk_key) ifadesi ise bu SDKKey adlı tablodaki key adlı sütundaki değeri x_sdk_key olan verileri alır.exec() ifadesi girdiğimiz bu sorguyu sql cinsine çevirip 
-    DB'de çalıştırır.session ifadesi de zaten db bağlantımızdı.first() ifadesi ise birden fazla veri gelirse ilk veriyi al diyoruz.(normalde zaten models.py içerisinde key: str = Field(index=True, unique=True) satırı ile bu key değerini
-    benzersiz olarak alıyoruz yani zaten tek bir sonuç değeri geriye dönecek,ama olduda bir hata ile karşılaştık ya da oldu da key: str = Field(index=True, unique=True) kodundaki unique ifadesi silindi diyelim,bu durumları da düşünerek 
+    yukarıdaki kod satırımız da ise parametre olarak aldığımız x_sdk_key değerini SDKKey adlı tabloda arıyoruz.kod satırına 
+    geçersek:
+    select(SDKKey) ifadesi SDKKey adlı tablomuza gider,where(SDKKey.key==x_sdk_key) ifadesi ise bu SDKKey adlı tablodaki key 
+    adlı sütundaki değeri x_sdk_key olan verileri alır.exec() ifadesi girdiğimiz bu sorguyu sql cinsine çevirip 
+    DB'de çalıştırır.session ifadesi de zaten db bağlantımızdı.first() ifadesi ise birden fazla veri gelirse ilk veriyi al diyoruz.
+    (normalde zaten models.py içerisinde key: str = Field(index=True, unique=True) satırı ile bu key değerini
+    benzersiz olarak alıyoruz yani zaten tek bir sonuç değeri geriye dönecek,ama olduda bir hata ile karşılaştık ya da oldu da 
+    key: str = Field(index=True, unique=True) kodundaki unique ifadesi silindi diyelim,bu durumları da düşünerek 
     güvenlik acısından ikinci bir doğrulama ekleyerek ilk veriyi aldık.
     """
 
@@ -41,7 +45,8 @@ def _resolve_sdk_and_environment(session: Session, env: str, x_sdk_key: str):
     if int(sdk.environment_id) != int(environment.id):
         raise HTTPException(status_code=401, detail="Invalid SDK key for this environment")
     """
-    önceden yaptığımız doğrumalardan farklı olacak şekilde yukarıdaki doğrulamayı ekledik,önceki endpoint işlemlerimde key ve environment var mı kontrolu yapıyordum ama bu key bu environment'a ait mi kontrolu
+    önceden yaptığımız doğrumalardan farklı olacak şekilde yukarıdaki doğrulamayı ekledik,önceki endpoint işlemlerimde key ve 
+    environment var mı kontrolu yapıyordum ama bu key bu environment'a ait mi kontrolu
     yapmıyordum,artık bu doğrulama ile aynı keye sahip olup farklı env'deki bir flag bu endpointleri çalıştıramayacak.
     """
 
@@ -62,27 +67,6 @@ async def get_flags(
 
     sdk, environment = _resolve_sdk_and_environment(session=session, env=env, x_sdk_key=x_sdk_key)
 
-        # ✅ Remote Config: global + env override configs topla
-    cfg_rows = session.exec(
-        select(FeatureConfig).where(
-            FeatureConfig.project_id == sdk.project_id,
-            (FeatureConfig.environment_id == None) | (FeatureConfig.environment_id == environment.id),
-        )
-    ).all()
-
-    configs: Dict[str, Any] = {}
-
-    # 1) önce global (environment_id=None)
-    for c in cfg_rows:
-        if c.environment_id is None:
-            configs[c.key] = c.value
-
-    # 2) sonra env override (aynı key varsa üzerine yazar)
-    for c in cfg_rows:
-        if c.environment_id == environment.id:
-            configs[c.key] = c.value
-
-
     cache_key = flags_cache_key(sdk.project_id, environment.id)
     cached = await cache_get_json(cache_key)
     if cached:
@@ -92,12 +76,14 @@ async def get_flags(
     print(f"[CACHE MISS] {cache_key}")
 
     """
-    yukarıda eklediğim Redis cache sayesinde önceden çektiğim bilgileri tekrardan kullancaksam db'ye gitmeme gerek kalmadan bellek üzerinden çekmemi sağlayacak.Bu da perfonmans kazandırır.
-    kod satırını yorumlarsak,ilk satırdaki cache_key daha önceden çekip cache'ye eklediğim verinin bir anahtarının olmasını sağlar.Bu sayede istenilen bilgiler uyuşursa bu bilgiye erişilir.
-    bu cache_key'in eşitliğini yorumlarsak: ff:flags bu bilginin bir feature flags flags'i cevabı olduğunu belirtir,yani prefix bir ifadedir,geri kalan bilgiler ise proje id'si ve env id'sidir.
-    diğer satırdaki cached_get_json() ise parametre olarak cache_key'in bilgisini cache'den çekip cached'a atmaktadır.Cevaba göre işlem yapılacağı için await olarak tanımlama yaptık.
+    yukarıda eklediğim Redis cache sayesinde önceden çektiğim bilgileri tekrardan kullancaksam db'ye gitmeme gerek kalmadan 
+    bellek üzerinden çekmemi sağlayacak.Bu da perfonmans kazandırır.
+    kod satırını yorumlarsak,ilk satırdaki cache_key daha önceden çekip cache'ye eklediğim verinin bir anahtarının olmasını sağlar.
+    cache_keylerin cache.py dosyasından oluşturulup alınması sağlandı,böylece cache'leri yanlış yazma derdi ortadan kalktı.
+    Bu sayede istenilen bilgiler uyuşursa bu bilgiye erişilir.
+    diğer satırdaki cached_get_json() ise parametre olarak cache_key'in bilgisini cache'den çekip cached'a atmaktadır.Cevaba göre 
+    işlem yapılacağı için await olarak tanımlama yaptık.
     3. satırda ise eğer ki bu cached dolu ise bilgiyi döndür diyoruz.
-    Güncelleme:cache_keylerin cache.py dosyasından oluşturulup alınması sağlandı,böylece cache'leri yanlış yazma derdi ortadan kalktı.  
     """
 
         # ✅ Remote Config: (global + env override) configs topla
@@ -119,7 +105,10 @@ async def get_flags(
     for c in cfg_rows:
         if c.environment_id == environment.id:
             configs[c.key] = c.value
-
+    """
+    cfg_rows adlı değişkene FeatureConfig adlı tablodan çektiğimiz ilgili verileri yolluyoruz,sonrasında ise bu verileri
+    global olma durumuna ve olmama durumuna göre key value ilişkisine göre configs dict'ine yolluyoruz.
+    """
 
     #Bu projenin flag'lerini getir
     flags = session.exec(
@@ -191,6 +180,10 @@ async def get_flags(
     await cache_set_json(cache_key, resp, ttl_seconds=120)
     return resp
 
+"""
+yukarıdaki flaglere ait olan bilgileri geri dönderiyorum.
+"""
+
 @router.post("/evaluate", response_model=EvaluateResponse)
 async def evaluate_flags(
     env: str = Query(..., description="Hedef ortam (örn: prod, dev, staging)"),
@@ -212,12 +205,7 @@ async def evaluate_flags(
     değil bu bilgiyi Header'dan alacaksın diyoruz,sonrasında ise bu bilgiyi X-SDK-Key adlı header'dan alacaksın diyoruz.
     şimdi metot içerisindeki 3. parametreye geçelim: bu parametre gelen user bilgilerini alıp bir dict'e atıyor.Body kısmına geçmeden önce şunu belirteyim,bu fonksiyonumuz bir post ifadesi olduğuna göre bir veri eklemesi yapacak,bu veriyi
     de alması gerekiyor,işte bu veriler FastAPI'de 3 yerden gelebilir,ya Query'den(ör: ?env:prod),ya Header'dan (ör: X-SDK-Key: demo3) ya da Body'den yani bir json gövdesinden gelir.işte biz burda user bilgilerini Body'den alacağız.
-    . . . ifadesi Body'den gelen isteğin zorunlu olduğunu belirtiyor yani Body'den herhangi bir bilgi gelmezse geriye hata dönderirecek,embed=True ifadesi ise Body'den gelen bilginin user adı altında toplanmasını istiyor,yani normalde
-    atıyorum body'den şöyle bir bilgi geliyor diyelim: {"country": "TR","is_premium": true,"user_id": "u123"} biz bu gelen veriyi {"user": { "country": "TR", "user_id": "u123" }} şeklinde alıyoruz,bu verileri user şeklinde gruplamamızın
-    sebebi body'den gelen verilerin sadece user olarak gelmemesidir(örnek olarak verdiğimiz body'nin içeriğindeki bilgiler sadece user içeriyor ama altta daha geniş bir body verisi var),yani gelen bilgileri 
-    {"user": { "country": "TR", "user_id": "u123" },"flag_keys": ["enable_dark_mode", "new_checkout"],"debug": true} şeklinde gruplandırırsak hangi
-    bilginin neye ait olduğunu kolay bir şekilde anlıyoruz.Şimdi bilgiyi bu şekilde düzenledik diyelim: {"user": { "country": "TR", "user_id": "u123" }}.Ardından bu bilgiler dict'te depolanırken key değerleri user olmayacak yine normal
-    key değerleri "country","user_id" olacakken,value değerleri "TR","u123" olacak.
+    . . . ifadesi Body'den gelen isteğin zorunlu olduğunu belirtiyor yani Body'den herhangi bir bilgi gelmezse geriye hata dönderirecek,
     session ile de Db bağlantısı kurabilmek için FastAPI'nin bize verdiği bağlantı havuzundan bir tane db bağlantısını alıyoruz.
     Güncelleme:önceden kullanıcıdan aldığımız verileri dict ifadesi ile alıyorduk ama artık EvaluateUserIn class'ını kullanarak model şeklinde alıyoruz,ayriyeten artık embed'in true olmasına gerek kalmadı çünkü bu modelimizin kendisi
     user tagını verilerimizin önüne ekliyor,biz ekstra embed=true yaparsak içiçe iki tane user görüneceğinden çirkin bir görüntü ortaya çıkar.  

@@ -149,6 +149,19 @@ class FeatureConfigUpdate(BaseModel):
     value: Any
 
 
+@router.patch("/flags/{flag_id}/on", response_model=FeatureFlag)
+def update_flag_on_off(flag_id: int, on: bool, session: Session = Depends(get_session)):
+    f = session.get(FeatureFlag, flag_id)
+    if not f:
+        raise HTTPException(404, "Flag not found")
+    f.on = on
+    session.add(f)
+    session.commit()
+    session.refresh(f)
+    invalidate_project_sync(f.project_id)
+    return f
+
+
 @router.patch("/flags/{flag_id}/status", response_model=FeatureFlag)
 def update_flag_status(flag_id: int, body: StatusUpdate, session: Session = Depends(get_session)):
     if body.status not in {"draft", "active", "published"}:

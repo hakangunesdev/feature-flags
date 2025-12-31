@@ -1,0 +1,31 @@
+﻿== Smoke Test starting ==
+Base: http://127.0.0.1:8000
+Admin: http://127.0.0.1:8000/admin/v1
+SDK:   http://127.0.0.1:8000/sdk/v1
+Admin auth: X-Admin-Key: (set)
+
+[1/6] Creating project...
+Project: {'name': 'smoke_20251219_222434_1mpbby', 'id': 20}
+[2/6] Creating environment...
+Env: {'id': 20, 'name': 'prod', 'project_id': 20}
+[3/6] Creating SDK key...
+SDKKey: {'project_id': 20, 'id': 20, 'key': 'smoke-20251219_222434_1mpbby', 'environment_id': 20}
+[4/6] Creating flag...
+Flag: {'id': 20, 'key': 'enable_dark_mode', 'status': 'active', 'default_variant': 'off', 'on': True, 'project_id': 20}
+[5/6] Creating variants...
+Variant off: {'flag_id': 20, 'payload': {}, 'name': 'off', 'id': 39}
+Variant dark: {'flag_id': 20, 'payload': {'theme': 'dark'}, 'name': 'dark', 'id': 40}
+[6/6] Creating rule (70/30 TR)...
+Rule: {'environment_id': 20, 'predicate': {'attr': 'country', 'op': '==', 'value': 'TR'}, 'id': 20, 'priority': 1, 'flag_id': 20, 'distribution': {'off': 70, 'dark': 30}}
+
+== Evaluate Stability Test (same user_id x10) ==
+Ô£à Stability OK: user_id=u-stable-1001 -> dark
+
+== Distribution Test (N=200, expected ~70/30) ==
+Counts:
+  - off: 136 (68.0%)
+  - dark: 64 (32.0%)
+Ô£à Distribution OK within ┬▒12.0pp
+
+== Smoke Test DONE Ô£à ==
+Created: project=smoke_20251219_222434_1mpbby (id=20), env=prod (id=20), sdk_key=smoke-20251219_222434_1mpbby, flag_id=20, rule_id=20

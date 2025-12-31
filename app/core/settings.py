@@ -18,3 +18,4 @@ class Settings(BaseSettings):
     )
 
 settings = Settings()
+#db bağlantıları ayarlarını tutmaktadır.

@@ -16,14 +16,23 @@ DB'ye gidilmiyor,yalnızca Redis'ten hazır JSON'u çekiliyor.
 # ---- Cache key helpers (tek yerden yönet) ----
 def flags_cache_key(project_id: int, environment_id: int) -> str:
     return f"ff:flags:{project_id}:{environment_id}"
+"""
+ff:flags bu bilginin bir feature flags flags'i cevabı olduğunu belirtir
+,yani prefix bir ifadedir,geri kalan bilgiler ise proje id'si ve env id'sidir.
+"""
 
 def flags_cache_match(project_id: int) -> str:
     return f"ff:flags:{project_id}:*"
+"""
+herhangi bir güncelleme işlemi sonrasında cache'deki bilgileri sorun çıkmasın diye silmem gerekiyor,bu metotu da yapısına girilen id'ye özgü olarak bir tane key değeri döndermektedir.
+"""
 
 def cfg_cache_key(project_id: int, environment_id: Optional[int]) -> str:
     scope = "global" if environment_id is None else str(environment_id)
     return f"ff:cfg:{project_id}:{scope}"
-
+"""
+bu da config silmek için oluşturulmuş bir metottur.
+"""
 
 
 
@@ -36,7 +45,7 @@ değerini aşağıdaki _get_client() metotundan alacak.
 
 _redis_sync: Optional[RedisSync] = None
 """
-sync olarak bir değişken oluşturk,redis bağlantısı için artık bunu kullanacağız.
+sync olarak bir değişken oluşturduk,redis bağlantısı için artık bunu kullanacağız.
 değerini aşağıdai _get_client_sync() metotundan alacak.
 """
 
@@ -69,6 +78,17 @@ def _get_client_sync() -> Optional[RedisSync]:
         except Exception:
             _redis_sync = None
     return _redis_sync
+"""
+-Optional[RedisSync] ifadesi der ki ben sana farklı değerler dönderebilirim,yani şunu demek istiyor,eğer ki redis ile bağlantı kurma aşamasında herhangi bir sorun ile karşılaşırsam except ile sana boş bir değer döndereririm,bu sayede redis none 
+olduğu için redis üzerinden değil de bilgiler sorunsuz bir şekilde db'den çekilmeye devam edecek,eğer ki hata çıkmazsa bilgiler redis de varsa redis üzerinden çekilmeye devam edilecek.
+-bu oluşturduğumuz bağlantıyı global tanımlanmış olan _redis_sync değişkenine atıyoruz.
+-eğer ki _redis_sync boş ise yani herhangi bir bağlantı kurulmamışsa if içerisine girerve RedisSync.from_url() ile bağlantı kurulmaya çalışılır.bu parametreler içindeki settings.REDIS_URL ile settings içerisindeki url ile redis ile bağlantı kurulması
+sağlanır,decode_responses=True ifadesi ile de normalde bilgileri byte byte dönen redis'in bilgileri string olarak dönmesi sağlandı,socket_connect_timeout=1 ifadesi ile de redis ile bağlantı kurulurken max 1 sn beklenmesi sağlandı,1 sn içerisinde
+bağlantı kurulmazsa bilgi db'den çekilecek,socket_timeout=1 ifadesi ile de redis'den bilginin 1 sn içerisinde çekilmesi bekleniyor,yine aynı şekilde bilgi 1 sn içerisinde redis üzerinden alınmazsa db'den çekilmesi sağlandı.
+-_redis_sync.ping() ifadesi ile de redis bağlantısının gerçekten kurulu olup olmadığını kontrol ediyoruz.Eğer hata olursa except' düşmesini sağlıyoruz.
+-except Exception ile de hata ile karşılaşırsak _redis_sync ifadesini none olarak geriye dönderiyoruz.
+-return ile de bu redis bağlantısını geriye dönderiyoruz.
+"""
 
 
 async def cache_get_json(key: str):
@@ -102,14 +122,12 @@ def invalidate_project_sync(project_id: int) -> None:
         return
 
     try:
-        # Pipelined invalidation for both flags and configs
         pipe = r.pipeline()
         found_any = False
 
-        # Patterns to invalidate
         patterns = [
-            flags_cache_match(project_id), # ff:flags:{project_id}:*
-            f"ff:cfg:{project_id}:*"      # ff:cfg:{project_id}:*
+            flags_cache_match(project_id), 
+            f"ff:cfg:{project_id}:*"     
         ]
 
         for pattern in patterns:
@@ -126,6 +144,7 @@ def invalidate_project_sync(project_id: int) -> None:
 
 
 """
+-metotun en başındaki ifade redis var mı yok mu kontrolunu yapıyor,eğer ki redis varsa içine giriyor,eğer ki yoksa return'la çıkarak içerdeki kod yapılarına girmesini engelleyerek perfonmans kazanıyor.
 -bu metotumuzda admin herhangi bir güncelleme işlemi veya silme işlemi gibi bir işlem yaptığında kullanıcılar bu değişiklikleri 120 sn gibi bir süre sonra görmesinler yani direkt yapılan dğişiklikleri görsünler diye yapılan bir metottur.
 -önceki kod yapımızda bu metot sync olduğu için global değişken olan _redis: Optional[Redis] = None değişkenini kullanamaıyor,ve tekrar tekrar redis bağlantısı oluşturuyordu,bu da iş parçacığı yükünü arttırıyor.bunu azaltmak için yukarıdaki kod 
 yapısında sync_redis değişkenini oluşturdum ve _get_client_sync() metotunu çağırdığım zaman bu değişkene redis bağlantısını yolladım.şimdi kendi kod yapıma geçersem:

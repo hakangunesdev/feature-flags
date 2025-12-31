@@ -81,6 +81,7 @@ def main():
     ap.add_argument("--tolerance", type=float, default=float(os.getenv("SMOKE_TOL", "12")))  # yüzde puan
     ap.add_argument("--timeout", type=int, default=int(os.getenv("SMOKE_TIMEOUT", "15")))
     ap.add_argument("--verbose", action="store_true")
+    ap.add_argument("--json-output", action="store_true", help="Print a single line of JSON with results at the end")
     args = ap.parse_args()
 
     base = args.base.rstrip("/")
@@ -104,10 +105,11 @@ def main():
     predicate = {"attr": "country", "op": "==", "value": "TR"}
 
     def log(msg: str):
-        print(msg)
+        if not args.json_output:
+            print(msg)
 
     def vlog(msg: str):
-        if args.verbose:
+        if args.verbose and not args.json_output:
             print(msg)
 
     log("== Smoke Test starting ==")
@@ -260,6 +262,23 @@ def main():
     log("\n== Smoke Test DONE ✅ ==")
     log(f"Created: project={project_name} (id={project_id}), env={env_name} (id={env_id}), sdk_key={sdk_key_value}, flag_id={flag_id}, rule_id={rule_id}")
 
+    if args.json_output:
+        res = {
+            "project_name": project_name,
+            "project_id": project_id,
+            "env_name": env_name,
+            "env_id": env_id,
+            "sdk_key": sdk_key_value,
+            "flag_id": flag_id,
+            "rule_id": rule_id
+        }
+        print(json.dumps(res))
+
 
 if __name__ == "__main__":
     main()
+
+
+"""
+bu dosya yapısı tablolara veri ekleyerek,endpointleri ve bu endpointlere bağlı olan sticky gibi birbirinden farklı kullanıcı oluşturmayı sağlayan test dosyamız.
+"""

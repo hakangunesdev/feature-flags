@@ -1,8 +1,22 @@
+//admin front end'i
 const $view = document.getElementById("view");
 const $alerts = document.getElementById("alerts");
 
 // Aynı backend içinde servis edeceğimiz için base boş kalsın:
 const API_BASE = ""; // istersen "/api" gibi prefix yok
+
+const $adminInput = document.getElementById("adminKeyInput");
+const $adminBadge = document.getElementById("adminKeyBadge");
+
+if ($adminInput) {
+  $adminInput.value = localStorage.getItem("ADMIN_KEY") || "";
+  if ($adminInput.value) $adminBadge.classList.remove("d-none");
+  $adminInput.oninput = () => {
+    localStorage.setItem("ADMIN_KEY", $adminInput.value);
+    if ($adminInput.value) $adminBadge.classList.remove("d-none");
+    else $adminBadge.classList.add("d-none");
+  };
+}
 
 function showAlert(message, type = "danger") {
   $alerts.innerHTML = `
@@ -24,9 +38,12 @@ function escapeHtml(str) {
 async function apiFetch(path, { method = "GET", body, headers = {} } = {}) {
   const opts = { method, headers: { ...headers } };
 
-  // ✅ Admin key (localStorage’dan)
   const adminKey = localStorage.getItem("ADMIN_KEY") || "";
   if (adminKey) opts.headers["X-Admin-Key"] = adminKey;
+  /*
+  localStorage ifadesi bilgisayarında tutulan bir not defteri gibi düşünebiliriz.sunucu buna erişemez,normalde ben ui kısmından api isteği atabilmem için benden admin key istiyorki bu zaten admin.py içerisinde de doğrulanmış bir kısım,bu key girildikten
+  sonra bunu oto olarak yukarıdaki kod yapısı localStorage'de tutar,böylece bundan sonraki her istek atışımda tek tek admin keyini girmeme gerek kalmadan localStorage bunu oto olarak dolduruyor.
+  */
 
   if (body !== undefined) {
     opts.headers["Content-Type"] = "application/json";
@@ -474,7 +491,11 @@ async function renderFlags() {
       <tr>
         <td>${f.id ?? ""}</td>
         <td><code>${escapeHtml(f.key ?? "")}</code></td>
-        <td>${String(!!f.on)}</td>
+        <td>
+           <button class="btn btn-sm ${f.on ? 'btn-success' : 'btn-secondary'} py-0 px-2 flag-toggle" data-id="${f.id}" data-on="${f.on}">
+            ${f.on ? 'ON' : 'OFF'}
+           </button>
+        </td>
         <td>${escapeHtml(f.default_variant ?? "")}</td>
         <td><span class="badge text-bg-secondary">${escapeHtml(f.status ?? "")}</span></td>
         <td class="text-end">
@@ -499,11 +520,25 @@ async function renderFlags() {
       </table>
     `;
 
+    document.querySelectorAll(".flag-toggle").forEach(btn => {
+      btn.onclick = async () => {
+        const id = btn.dataset.id;
+        const turningOn = btn.dataset.on === "false";
+        try {
+          await apiFetch(`/admin/v1/flags/${id}/on?on=${turningOn}`, { method: "PATCH" });
+          await loadFlags();
+          showAlert(`Flag ${turningOn ? 'enabled' : 'disabled'} (Cache invalidated) ✅`, "success");
+        } catch (e) {
+          showAlert(e.message);
+        }
+      };
+    });
+
     document.querySelectorAll('button[data-action="manage"]').forEach(btn => {
-        btn.onclick = () => {
-            const id = btn.getAttribute("data-id");
-            location.hash = `#/flags/${id}`;
-        };
+      btn.onclick = () => {
+        const id = btn.getAttribute("data-id");
+        location.hash = `#/flags/${id}`;
+      };
     });
 
   }
@@ -1308,42 +1343,42 @@ async function renderFlagManage(flagId) {
     </div>
   `;
 
-    // RULE EDIT state
+  // RULE EDIT state
   let editingRuleId = null;
 
-    // Edit panel kapat
+  // Edit panel kapat
   document.getElementById("closeRuleEditor").onclick = () => {
     editingRuleId = null;
     document.getElementById("ruleEditor").classList.add("d-none");
   };
 
-    // Save Changes (PATCH)
+  // Save Changes (PATCH)
   document.getElementById("ruleEditForm").onsubmit = async (e) => {
     e.preventDefault();
     try {
-        if (!editingRuleId) return showAlert("No rule selected.", "warning");
+      if (!editingRuleId) return showAlert("No rule selected.", "warning");
 
-        const priority = Number(document.getElementById("editRulePriority").value || 1);
-        if (priority < 1) return showAlert("Priority must be >= 1", "danger");
+      const priority = Number(document.getElementById("editRulePriority").value || 1);
+      if (priority < 1) return showAlert("Priority must be >= 1", "danger");
 
-        const predicateText = document.getElementById("editRulePredicate").value.trim();
-        const distributionText = document.getElementById("editRuleDistribution").value.trim();
+      const predicateText = document.getElementById("editRulePredicate").value.trim();
+      const distributionText = document.getElementById("editRuleDistribution").value.trim();
 
-        const predicate = parseJsonOrThrow("Predicate", predicateText);
-        const distribution = parseJsonOrThrow("Distribution", distributionText);
+      const predicate = parseJsonOrThrow("Predicate", predicateText);
+      const distribution = parseJsonOrThrow("Distribution", distributionText);
 
-        await apiFetch(`/admin/v1/rules/${editingRuleId}`, {
+      await apiFetch(`/admin/v1/rules/${editingRuleId}`, {
         method: "PATCH",
         body: { priority, predicate, distribution }
-        });
+      });
 
-        document.getElementById("ruleEditor").classList.add("d-none");
-        editingRuleId = null;
+      document.getElementById("ruleEditor").classList.add("d-none");
+      editingRuleId = null;
 
-        await loadRules();
-        showAlert("Rule updated.", "success");
+      await loadRules();
+      showAlert("Rule updated.", "success");
     } catch (err) {
-        showAlert(err.message, "danger");
+      showAlert(err.message, "danger");
     }
   };
 
@@ -1371,9 +1406,9 @@ async function renderFlagManage(flagId) {
 
   // ---- Variants
   async function loadVariants() {
-  const variants = await apiFetch(`/admin/v1/flags/${flagId}/variants`);
+    const variants = await apiFetch(`/admin/v1/flags/${flagId}/variants`);
 
-  const rows = (variants || []).map(v => `
+    const rows = (variants || []).map(v => `
     <tr>
       <td>${v.id ?? ""}</td>
       <td><code>${escapeHtml(v.name ?? "")}</code></td>
@@ -1388,7 +1423,7 @@ async function renderFlagManage(flagId) {
     </tr>
   `).join("");
 
-  document.getElementById("variantsWrap").innerHTML = `
+    document.getElementById("variantsWrap").innerHTML = `
     <table class="table table-sm align-middle">
       <thead>
         <tr>
@@ -1402,56 +1437,56 @@ async function renderFlagManage(flagId) {
     </table>
   `;
 
-  document.querySelectorAll('button[data-act="del-variant"]').forEach(btn => {
-    btn.onclick = async () => {
-      const variantId = Number(btn.dataset.id);
-      if (!variantId) return;
-      if (!confirm(`Delete variant id=${variantId}?`)) return;
+    document.querySelectorAll('button[data-act="del-variant"]').forEach(btn => {
+      btn.onclick = async () => {
+        const variantId = Number(btn.dataset.id);
+        if (!variantId) return;
+        if (!confirm(`Delete variant id=${variantId}?`)) return;
 
-      try {
-        await apiFetch(`/admin/v1/variants/${variantId}`, { method: "DELETE" });
-        await loadVariants();
-        showAlert("Variant deleted.", "success");
-      } catch (err) {
-        showAlert(err.message, "danger");
-      }
-    };
-  });
-}
+        try {
+          await apiFetch(`/admin/v1/variants/${variantId}`, { method: "DELETE" });
+          await loadVariants();
+          showAlert("Variant deleted.", "success");
+        } catch (err) {
+          showAlert(err.message, "danger");
+        }
+      };
+    });
+  }
 
   // Refresh button
-document.getElementById("refreshVariants").onclick =
-  () => loadVariants().catch(e => showAlert(e.message));
+  document.getElementById("refreshVariants").onclick =
+    () => loadVariants().catch(e => showAlert(e.message));
 
-// Delete All Variants button
-document.getElementById("deleteAllVariants").onclick = async () => {
-  try {
-    // 1) Önce rule var mı bak → varsa variant silmeyelim (409 yememek için)
-    const rules = await apiFetch(`/admin/v1/flags/${flagId}/rules`);
-    if (rules && rules.length > 0) {
-      return showAlert(
-        `Bu flag için ${rules.length} rule var. Önce Rules bölümünden "Delete All" yap, sonra variantları silebilirsin.`,
-        "warning"
-      );
+  // Delete All Variants button
+  document.getElementById("deleteAllVariants").onclick = async () => {
+    try {
+      // 1) Önce rule var mı bak → varsa variant silmeyelim (409 yememek için)
+      const rules = await apiFetch(`/admin/v1/flags/${flagId}/rules`);
+      if (rules && rules.length > 0) {
+        return showAlert(
+          `Bu flag için ${rules.length} rule var. Önce Rules bölümünden "Delete All" yap, sonra variantları silebilirsin.`,
+          "warning"
+        );
+      }
+
+      // 2) Variantları çek
+      const variants = await apiFetch(`/admin/v1/flags/${flagId}/variants`);
+      if (!variants || variants.length === 0) return showAlert("No variants to delete.", "info");
+
+      if (!confirm(`Delete ALL variants for flag_id=${flagId}? (${variants.length} items)`)) return;
+
+      // 3) Tek tek sil
+      for (const v of variants) {
+        await apiFetch(`/admin/v1/variants/${v.id}`, { method: "DELETE" });
+      }
+
+      await loadVariants();
+      showAlert("All variants deleted.", "success");
+    } catch (err) {
+      showAlert(err.message, "danger");
     }
-
-    // 2) Variantları çek
-    const variants = await apiFetch(`/admin/v1/flags/${flagId}/variants`);
-    if (!variants || variants.length === 0) return showAlert("No variants to delete.", "info");
-
-    if (!confirm(`Delete ALL variants for flag_id=${flagId}? (${variants.length} items)`)) return;
-
-    // 3) Tek tek sil
-    for (const v of variants) {
-      await apiFetch(`/admin/v1/variants/${v.id}`, { method: "DELETE" });
-    }
-
-    await loadVariants();
-    showAlert("All variants deleted.", "success");
-  } catch (err) {
-    showAlert(err.message, "danger");
-  }
-};
+  };
 
 
   document.getElementById("variantForm").onsubmit = async (e) => {
@@ -1478,15 +1513,15 @@ document.getElementById("deleteAllVariants").onclick = async () => {
   // ---- Rules
   async function loadRules() {
 
-  const rules = await apiFetch(`/admin/v1/flags/${flagId}/rules`);
+    const rules = await apiFetch(`/admin/v1/flags/${flagId}/rules`);
 
-  const selectedEnvId = Number(document.getElementById("ruleEnv").value || 0);
-  let filtered = rules || [];
-  if (selectedEnvId) {
-  filtered = filtered.filter(r => Number(r.environment_id) === selectedEnvId);
-  }
+    const selectedEnvId = Number(document.getElementById("ruleEnv").value || 0);
+    let filtered = rules || [];
+    if (selectedEnvId) {
+      filtered = filtered.filter(r => Number(r.environment_id) === selectedEnvId);
+    }
 
-  const rows = (filtered || []).map(r => `
+    const rows = (filtered || []).map(r => `
     <tr>
       <td>${r.id ?? ""}</td>
       <td>${escapeHtml((window.__ruleEnvsById?.[Number(r.environment_id)]?.name) || String(r.environment_id ?? ""))}</td>
@@ -1511,7 +1546,7 @@ document.getElementById("deleteAllVariants").onclick = async () => {
   `).join("");
 
 
-  document.getElementById("rulesWrap").innerHTML = `
+    document.getElementById("rulesWrap").innerHTML = `
     <table class="table table-sm align-middle">
       <thead><tr>
         <th style="width:90px">ID</th>
@@ -1525,77 +1560,77 @@ document.getElementById("deleteAllVariants").onclick = async () => {
     </table>
   `;
 
-  document.querySelectorAll('button[data-act="del-rule"]').forEach(btn => {
-    btn.onclick = async () => {
-      const ruleId = Number(btn.dataset.id);
-      if (!ruleId) return;
-      if (!confirm(`Delete rule id=${ruleId}?`)) return;
+    document.querySelectorAll('button[data-act="del-rule"]').forEach(btn => {
+      btn.onclick = async () => {
+        const ruleId = Number(btn.dataset.id);
+        if (!ruleId) return;
+        if (!confirm(`Delete rule id=${ruleId}?`)) return;
 
-      try {
-        await apiFetch(`/admin/v1/rules/${ruleId}`, { method: "DELETE" });
-        await loadRules();
-        showAlert("Rule deleted.", "success");
-      } catch (err) {
-        showAlert(err.message, "danger");
-      }
-    };
-  });
+        try {
+          await apiFetch(`/admin/v1/rules/${ruleId}`, { method: "DELETE" });
+          await loadRules();
+          showAlert("Rule deleted.", "success");
+        } catch (err) {
+          showAlert(err.message, "danger");
+        }
+      };
+    });
 
-  // Edit handlers
-  document.querySelectorAll('button[data-act="edit-rule"]').forEach(btn => {
-    btn.onclick = () => {
-      const ruleId = Number(btn.dataset.id);
-      if (!ruleId) return;
+    // Edit handlers
+    document.querySelectorAll('button[data-act="edit-rule"]').forEach(btn => {
+      btn.onclick = () => {
+        const ruleId = Number(btn.dataset.id);
+        if (!ruleId) return;
 
-      // aynı loadRules içinde çekilmiş rules listesinden bul
-      const rule = (rules || []).find(x => Number(x.id) === ruleId);
-      if (!rule) return showAlert("Rule not found in list.", "danger");
+        // aynı loadRules içinde çekilmiş rules listesinden bul
+        const rule = (rules || []).find(x => Number(x.id) === ruleId);
+        if (!rule) return showAlert("Rule not found in list.", "danger");
 
-      editingRuleId = ruleId;
+        editingRuleId = ruleId;
 
-      document.getElementById("editRuleId").textContent = `id=${ruleId}`;
-      document.getElementById("editRulePriority").value = String(rule.priority ?? 1);
-      document.getElementById("editRulePredicate").value = JSON.stringify(rule.predicate ?? {}, null, 2);
-      document.getElementById("editRuleDistribution").value = JSON.stringify(rule.distribution ?? {}, null, 2);
+        document.getElementById("editRuleId").textContent = `id=${ruleId}`;
+        document.getElementById("editRulePriority").value = String(rule.priority ?? 1);
+        document.getElementById("editRulePredicate").value = JSON.stringify(rule.predicate ?? {}, null, 2);
+        document.getElementById("editRuleDistribution").value = JSON.stringify(rule.distribution ?? {}, null, 2);
 
-      document.getElementById("ruleEditor").classList.remove("d-none");
-      document.getElementById("editRulePredicate").focus();
-    };
-  });
+        document.getElementById("ruleEditor").classList.remove("d-none");
+        document.getElementById("editRulePredicate").focus();
+      };
+    });
 
 
-}
+  }
 
-    // Refresh button
-    document.getElementById("refreshRules").onclick =
+  // Refresh button
+  document.getElementById("refreshRules").onclick =
     () => loadRules().catch(e => showAlert(e.message));
 
-    document.getElementById("deleteAllRules").onclick = async () => {
-        try {
-            const selectedEnvId = Number(document.getElementById("ruleEnv").value || 0);
-            if (!selectedEnvId) return showAlert("Select an environment first.", "warning");
+  document.getElementById("deleteAllRules").onclick = async () => {
+    try {
+      const selectedEnvId = Number(document.getElementById("ruleEnv").value || 0);
+      if (!selectedEnvId) return showAlert("Select an environment first.", "warning");
 
-            const rules = await apiFetch(`/admin/v1/flags/${flagId}/rules`);
-            const envRules = (rules || []).filter(r => Number(r.environment_id) === selectedEnvId);
+      const rules = await apiFetch(`/admin/v1/flags/${flagId}/rules`);
+      const envRules = (rules || []).filter(r => Number(r.environment_id) === selectedEnvId);
 
-            if (envRules.length === 0) {
-            return showAlert("No rules to delete for selected environment.", "info");
-            }
+      if (envRules.length === 0) {
+        return showAlert("No rules to delete for selected environment.", "info");
+      }
 
-            const envName = window.__ruleEnvsById?.[selectedEnvId]?.name || `env_id=${selectedEnvId}`;
+      const envName = window.__ruleEnvsById?.[selectedEnvId]?.name || `env_id=${selectedEnvId}`;
 
-            if (!confirm(`Delete ALL rules for ${envName}? (${envRules.length} items)`)) return;
+      if (!confirm(`Delete ALL rules for ${envName}? (${envRules.length} items)`)) return;
 
-            for (const r of envRules) {
-            await apiFetch(`/admin/v1/rules/${r.id}`, { method: "DELETE" });
-            }
+      for (const r of envRules) {
+        await apiFetch(`/admin/v1/rules/${r.id}`, { method: "DELETE" });
+      }
 
-            await loadRules();
-            showAlert(`All rules deleted for ${envName}.`, "success");
-        } catch (err) {
-            showAlert(err.message, "danger");
-        }
-    };
+      await loadRules();
+      showAlert(`All rules deleted for ${envName}.`, "success");
+    } catch (err) {
+      showAlert(err.message, "danger");
+    }
+  };
 
 
   document.getElementById("ruleForm").onsubmit = async (e) => {
